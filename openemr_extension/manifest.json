@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "OpenEMR SOAP Extractor",
-  "version": "3.0",
-  "description": "Enhanced extraction of SOAP notes and medical codes from OpenEMR with AI integration",
+  "name": "OpenEMR Medical Code Extractor",
+  "version": "2.0",
+  "description": "Enhanced extraction and validation of medical codes from OpenEMR doctor notes with export features",
   "permissions": [
     "activeTab",
     "scripting",
@@ -16,18 +16,11 @@
     "*://localhost/*",
     "*://127.0.0.1/*"
   ],
-  "content_scripts": [
-    {
-      "matches": ["*://localhost/*", "*://127.0.0.1/*"],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    }
-  ],
   "action": {
     "default_popup": "popup.html"
   },
   "options_page": "options.html",
   "icons": {
-    "48": "icon-48.png"
+    "48": "icon.png"
   }
 }
