@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "OpenEMR Medical Code Extractor",
+  "version": "1.0",
+  "description": "Extracts medical codes from OpenEMR doctors' notes",
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["*://*/interface/forms/*", "*://*/interface/encounter/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "48": "icon.png"
+  }
