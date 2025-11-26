@@ -1,292 +1,186 @@
-// Improved code extraction with progress and validation
-document.getElementById('extract').addEventListener('click', async () => {
-  const button = document.getElementById('extract');
-  const originalText = button.textContent;
-  button.textContent = 'Extracting...';
-  button.disabled = true;
+// SOAP Assistant popup behavior
+const getContentBtn = document.getElementById('getContent');
+const generateBtn = document.getElementById('generateSoap');
+const clearBtn = document.getElementById('clearBtn');
+const extractedTextEl = document.getElementById('extractedText');
+const statusEl = document.getElementById('status');
+const icdListEl = document.getElementById('icdList');
+const cptListEl = document.getElementById('cptList');
+const snomedListEl = document.getElementById('snomedList');
+const contentArea = document.getElementById('contentArea');
+const soapOutput = document.getElementById('soapOutput');
+const soapText = document.getElementById('soapText');
 
+function setStatus(msg, busy = false) {
+  statusEl.innerHTML = msg + (busy ? ' <span class="spinner"></span>' : '');
+}
+
+// Tab switching
+document.getElementById('tabExtracted').addEventListener('click', () => switchTab('extracted'));
+document.getElementById('tabCodes').addEventListener('click', () => switchTab('codes'));
+
+function switchTab(tab) {
+  const tabExtracted = document.getElementById('tabExtracted');
+  const tabCodes = document.getElementById('tabCodes');
+  const extractedContent = document.getElementById('extractedContent');
+  const codesContent = document.getElementById('codesContent');
+
+  if (tab === 'extracted') {
+    tabExtracted.classList.add('active');
+    tabCodes.classList.remove('active');
+    extractedContent.classList.add('active');
+    codesContent.classList.remove('active');
+  } else {
+    tabCodes.classList.add('active');
+    tabExtracted.classList.remove('active');
+    codesContent.classList.add('active');
+    extractedContent.classList.remove('active');
+  }
+}
+
+clearBtn.addEventListener('click', () => {
+  extractedTextEl.value = '';
+  renderCodes({});
+  generateBtn.disabled = true;
+  contentArea.style.display = 'none';
+  soapOutput.style.display = 'none';
+  soapText.textContent = '';
+  chrome.storage.local.remove(['lastExtraction']);
+  setStatus('Cleared');
+});
+
+getContentBtn.addEventListener('click', async () => {
   try {
-    let [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) {
-      showError('No active tab found');
-      return;
-    }
+    setStatus('Extracting content...', true);
+    getContentBtn.disabled = true;
+  contentArea.style.display = 'none';
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) { setStatus('No active tab'); getContentBtn.disabled = false; return; }
 
-    // Check if it's an OpenEMR page
-    if (!tab.url.includes('openemr') && !tab.url.includes('localhost') && !tab.url.includes('127.0.0.1')) {
-      showError('Not an OpenEMR page. Please navigate to OpenEMR first.');
-      return;
-    }
-
-    // Run the extraction in all frames
-    chrome.scripting.executeScript({
+    // Execute extraction in all frames and aggregate
+    const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id, allFrames: true },
-      function: extractCodes
-    }, (results) => {
-      if (!results || results.length === 0) {
-        showError('Script execution failed');
-        return;
-      }
-
-      // Aggregate with improved processing
-      const aggregate = aggregateResults(results);
-      aggregate.startTime = Date.now();
-
-      // Apply code validation
-      validateCodes(aggregate);
-
-      // Store results in storage for persistence
-      chrome.storage.local.set({ lastExtraction: aggregate });
-
-      // Display results with enhanced UI
-      displayEnhancedResults(aggregate);
-
-      updateStatistics(aggregate);
+      function: pageExtractor
     });
-  } catch (error) {
-    showError('Error: ' + error.message);
+
+    if (!results || results.length === 0) {
+      setStatus('Failed to run extractor');
+      getContentBtn.disabled = false;
+      return;
+    }
+
+    const agg = aggregateResults(results.map(r => r.result).filter(Boolean));
+
+    // show extracted text and codes
+    extractedTextEl.value = agg.text || '';
+    renderCodes(agg.codes || {});
+
+    // enable generate
+    generateBtn.disabled = false;
+    contentArea.style.display = 'block';
+    setStatus(`Extraction completed. ${Object.values(agg.codes || {}).flat().length} codes found.`);
+
+    // persist last extraction
+    chrome.storage.local.set({ lastExtraction: agg });
+  } catch (err) {
+    setStatus('Error: ' + (err.message || err));
   } finally {
-    button.textContent = originalText;
-    button.disabled = false;
+    getContentBtn.disabled = false;
   }
 });
 
 // Improved aggregation with error handling
 function aggregateResults(results) {
+  // results: array of objects returned by pageExtractor
   const aggregate = { text: '', codes: {}, totalCodes: 0, extractionTime: 0 };
-  const startTime = Date.now();
+  const start = Date.now();
 
-  for (const res of results) {
-    if (!res || !res.result) continue;
-    const r = res.result;
+  for (const r of results) {
+    if (!r) continue;
     aggregate.text += (r.text || '') + '\n';
-
-    // Merge codes with validation
     for (const [type, list] of Object.entries(r.codes || {})) {
       if (!aggregate.codes[type]) aggregate.codes[type] = new Set();
-      for (const c of list) {
-        if (c && c.trim()) aggregate.codes[type].add(c.trim());
-      }
+      for (const c of (list || [])) if (c && c.toString().trim()) aggregate.codes[type].add(c.toString().trim());
     }
   }
 
-  // Convert to arrays and calculate totals
   for (const k of Object.keys(aggregate.codes)) {
     aggregate.codes[k] = Array.from(aggregate.codes[k]);
     aggregate.totalCodes += aggregate.codes[k].length;
   }
-  aggregate.extractionTime = Date.now() - startTime;
+  aggregate.extractionTime = Date.now() - start;
   return aggregate;
 }
 
-// Code validation against known patterns
-function validateCodes(aggregate) {
-  // ICD-10 validation - filter invalid formats
-  if (aggregate.codes['ICD-10']) {
-    aggregate.codes['ICD-10'] = aggregate.codes['ICD-10'].filter(code => validateICD10(code));
+
+
+// The function that will run in the page context to extract text and codes
+function pageExtractor() {
+  try {
+    const ignoredTags = new Set(['SCRIPT','STYLE','NOSCRIPT','IFRAME','IMG','SVG','CANVAS','INPUT','BUTTON','SELECT','OPTION']);
+    // Collect body visible text
+    let text = (document.body && document.body.innerText) ? document.body.innerText : '';
+
+    // Collect focused areas: elements with class or id hints
+    const hintSelectors = '[class*=note],[class*=notes],[class*=clinical],[class*=narrative],[id*=note],[id*=notes],[id*=clinical],[id*=narrative],[class*=visit],[id*=visit],[class*=encounter],[id*=encounter]';
+    try {
+      const hints = document.querySelectorAll(hintSelectors);
+      hints.forEach(el => { if (el && el.innerText) text += '\n' + el.innerText; });
+    } catch(e) {}
+
+    // Collect textarea/input values
+    const inputs = document.querySelectorAll('textarea, input[type=text], [contenteditable="true"]');
+    inputs.forEach(i => { try { text += '\n' + (i.value || i.innerText || i.textContent || ''); } catch(e) {} });
+
+    // Normalize whitespace
+    text = text.replace(/\u00A0/g,' ').replace(/\s+/, ' ').trim();
+
+    const codes = {};
+    // ICD-10 e.g. J20.9 or A01
+    const icdRegex = /\b[A-TV-Z]\d{2}(?:\.\d{1,4})?\b/g;
+    const icd = (text.match(icdRegex) || []).map(s => s.trim());
+    codes['ICD-10'] = [...new Set(icd)];
+
+    // CPT 5-digit
+    const cptRegex = /\b\d{5}\b/g;
+    const cpt = (text.match(cptRegex) || []).map(s => s.trim());
+    codes['CPT'] = [...new Set(cpt)];
+
+    // SNOMED - long numeric identifiers often shown as 'SNOMED CT:123456789'
+    const snomedRegex = /(?:SNOMED[: ]+CT[: ]*)?(\d{6,18})/gi;
+    let sm = [];
+    let m;
+    while ((m = snomedRegex.exec(text)) !== null) sm.push(m[1]);
+    codes['SNOMED'] = [...new Set(sm)];
+
+    return { text: text.substring(0, 16000), codes };
+  } catch (err) {
+    return { text: '', codes: {} };
   }
-  // CPT validation - ensure 5 digits, not dates
-  if (aggregate.codes['CPT']) {
-    aggregate.codes['CPT'] = aggregate.codes['CPT'].filter(code => validateCPT(code));
-  }
-  // SNOMED validation - ensure valid CT format
-  if (aggregate.codes['SNOMED']) {
-    aggregate.codes['SNOMED'] = aggregate.codes['SNOMED'].filter(code => validateSNOMED(code));
-  }
-}
-
-// Validation functions
-function validateICD10(code) {
-  return /^[A-Z]\d{2}(\.\d{1,3})?$/.test(code) && code.length >= 3;
-}
-
-function validateCPT(code) {
-  const numCode = code.replace(/\D/g, ''); // Remove non-digits
-  return numCode.length === 5 && /^\d{5}$/.test(numCode) &&
-         !/\d{4}[01]\d[0123]\d/.test(numCode); // Avoid date-like patterns
-}
-
-function validateSNOMED(code) {
-  return /^\d{9,18}$/.test(code) && parseInt(code) >= 10000000;
-}
-
-function showError(message) {
-  const resultsDiv = document.getElementById('results');
-  resultsDiv.innerHTML = `<div class="code-section">
-    <h4 style="color: #dc3545;">❌ Error</h4>
-    <p>${message}</p>
-  </div>`;
-}
-
-function extractCodes() {
-  // Get text from body
-  let textAggregated = document.body.innerText || '';
-
-  // Also get text from textarea and input elements
-  const textareas = document.querySelectorAll('textarea, input[type="text"], input[type="textarea"], input:not([type]), [contenteditable="true"]');
-  textareas.forEach(element => {
-    textAggregated += ' ' + (element.value || element.textContent || element.innerText || '');
-  });
-
-  const codes = {};
-
-  // ICD-10 patterns: A00-Z99 with optional dot and numbers
-  // ICD-10 patterns: A00-Z99 with optional dot and numbers
-  const icd10Regex = /\b([A-Z]\d{2})(?:\.\d{1,3})?\b/g;
-  const icd10Matches = textAggregated.match(icd10Regex) || [];
-  codes['ICD-10'] = [...new Set(icd10Matches.map(s => s.trim()))].filter(Boolean);
-
-  // CPT codes: 5-digit numbers
-  const cptRegex = /\b\d{5}\b/g;
-  const cptMatches = (textAggregated.match(cptRegex) || []).filter(code => /^[0-9]{5}$/.test(code));
-  codes['CPT'] = [...new Set(cptMatches)];
-
-  // SNOMED: Long numbers (9+ digits)
-  const snomedRegex = /\b\d{9,}\b/g;
-  const snomedMatches = textAggregated.match(snomedRegex) || [];
-  codes['SNOMED'] = [...new Set(snomedMatches)];
-
-  return {codes: codes, text: textAggregated.substring(0, 500), found: textAggregated.includes('J20.9')};
 }
 
 // Enhanced display with filtering, sorting, export options
-function displayEnhancedResults(aggregate) {
-  const resultsDiv = document.getElementById('results');
-  resultsDiv.innerHTML = '';
+function renderCodes(codes) {
+  icdListEl.innerHTML = '';
+  cptListEl.innerHTML = '';
+  snomedListEl.innerHTML = '';
 
-  // Add control buttons
-  const controlsDiv = document.createElement('div');
-  controlsDiv.className = 'controls';
-  controlsDiv.style.marginBottom = '10px';
-
-  const exportBtn = document.createElement('button');
-  exportBtn.textContent = '📋 Copy All';
-  exportBtn.onclick = () => exportCodes(aggregate.codes, 'clipboard');
-  exportBtn.style.marginRight = '5px';
-  exportBtn.style.fontSize = '12px';
-  exportBtn.style.padding = '5px 10px';
-
-  const csvBtn = document.createElement('button');
-  csvBtn.textContent = '💾 Export CSV';
-  csvBtn.onclick = () => exportCodes(aggregate.codes, 'csv');
-  csvBtn.style.marginRight = '5px';
-  csvBtn.style.fontSize = '12px';
-  csvBtn.style.padding = '5px 10px';
-
-  const filterSelect = document.createElement('select');
-  filterSelect.id = 'codeFilter';
-  filterSelect.onchange = () => filterAndDisplay(aggregate);
-  filterSelect.style.fontSize = '12px';
-  filterSelect.style.marginRight = '5px';
-
-  const allOption = document.createElement('option');
-  allOption.value = 'all';
-  allOption.textContent = 'All Types';
-  filterSelect.appendChild(allOption);
-
-  const types = ['ICD-10', 'CPT', 'SNOMED'];
-  types.forEach(type => {
-    const option = document.createElement('option');
-    option.value = type;
-    option.textContent = type;
-    filterSelect.appendChild(option);
-  });
-
-  controlsDiv.appendChild(exportBtn);
-  controlsDiv.appendChild(csvBtn);
-  controlsDiv.appendChild(filterSelect);
-  resultsDiv.appendChild(controlsDiv);
-
-  // Display codes by type with sorting
-  const codeTypes = ['ICD-10', 'CPT', 'SNOMED'];
-  let hasResults = false;
-
-  codeTypes.forEach(type => {
-    if (aggregate.codes[type] && aggregate.codes[type].length > 0) {
-      const section = document.createElement('div');
-      section.className = 'code-section';
-
-      const header = document.createElement('h4');
-      header.textContent = `${type} (${aggregate.codes[type].length})`;
-      section.appendChild(header);
-
-      const ul = document.createElement('ul');
-      aggregate.codes[type].sort().forEach(code => {
-        const li = document.createElement('li');
-        li.textContent = code;
-        li.onclick = () => highlightCode(code, type);
-        li.style.cursor = 'pointer';
-        ul.appendChild(li);
-      });
-      section.appendChild(ul);
-      resultsDiv.appendChild(section);
-      hasResults = true;
-    }
-  });
-
-  if (!hasResults) {
-    const noResults = document.createElement('div');
-    noResults.className = 'no-results';
-    noResults.textContent = 'No valid medical codes found on this page.';
-    resultsDiv.appendChild(noResults);
-  }
+  (codes['ICD-10'] || []).forEach(c => icdListEl.appendChild(createChip(c)));
+  (codes['CPT'] || []).forEach(c => cptListEl.appendChild(createChip(c)));
+  (codes['SNOMED'] || []).forEach(c => snomedListEl.appendChild(createChip(c)));
 }
 
-function filterAndDisplay(aggregate) {
-  const filter = document.getElementById('codeFilter').value;
-  const resultsDiv = document.getElementById('results');
-  const filteredCodes = {};
-
-  if (filter === 'all') {
-    Object.assign(filteredCodes, aggregate.codes);
-  } else if (filter && aggregate.codes[filter]) {
-    filteredCodes[filter] = aggregate.codes[filter];
-  }
-
-  const tempAggregate = { ...aggregate, codes: filteredCodes };
-  displayEnhancedResults(tempAggregate);
+function createChip(text) {
+  const d = document.createElement('div');
+  d.className = 'chip';
+  d.textContent = text;
+  d.title = 'Click to highlight on page';
+  d.style.cursor = 'pointer';
+  d.onclick = () => highlightOnPage(text);
+  return d;
 }
 
-function updateStatistics(aggregate) {
-  const statsDiv = document.getElementById('stats');
-  statsDiv.textContent = `Extraction completed in ${aggregate.extractionTime}ms. Total codes: ${aggregate.totalCodes}. Last updated: ${new Date().toLocaleTimeString()}`;
-}
 
-function exportCodes(codes, format) {
-  let exportData = '';
-
-  if (format === 'clipboard') {
-    const allCodes = Object.values(codes).flat();
-    navigator.clipboard.writeText(allCodes.join(', ')).then(() => {
-      alert('Codes copied to clipboard!');
-    });
-  } else if (format === 'csv') {
-    const csvLines = ['Type,Code'];
-    Object.entries(codes).forEach(([type, list]) => {
-      list.forEach(code => csvLines.push(`${type},${code}`));
-    });
-    const csvContent = csvLines.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'extracted_codes.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-}
-
-function highlightCode(code, type) {
-  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      function: highlightOnPage,
-      args: [code]
-    });
-  });
-}
 
 function highlightOnPage(code) {
   const elements = document.querySelectorAll('*');
@@ -305,19 +199,82 @@ function highlightOnPage(code) {
 }
 
 // Load persistent results on popup open
+// Load cached extraction if present
 document.addEventListener('DOMContentLoaded', () => {
-  chrome.storage.local.get(['lastExtraction'], (result) => {
-    if (result.lastExtraction) {
-      document.getElementById('stats').textContent = 'Last Results (Cached)';
-      displayEnhancedResults(result.lastExtraction);
-      updateStatistics(result.lastExtraction);
+  chrome.storage.local.get(['lastExtraction'], (res) => {
+    if (res.lastExtraction) {
+      extractedTextEl.value = res.lastExtraction.text || '';
+      renderCodes(res.lastExtraction.codes || {});
+      generateBtn.disabled = false;
+      contentArea.style.display = 'block';
+      setStatus('Loaded cached extraction');
     }
   });
 });
 
-// Clear button handler
-document.getElementById('clear').addEventListener('click', () => {
-  document.getElementById('results').innerHTML = '';
-  document.getElementById('stats').textContent = 'Ready for extraction.';
-  chrome.storage.local.remove('lastExtraction');
+// Generate SOAP button handler
+generateBtn.addEventListener('click', async () => {
+  const content = extractedTextEl.value.trim();
+  if (!content) { setStatus('No content to send'); return; }
+
+  setStatus('Generating SOAP...', true);
+  generateBtn.disabled = true;
+  try {
+    // Get API key from options
+    const options = await new Promise(resolve => chrome.storage.sync.get({ apiKey: '' }, resolve));
+    const apiKey = options.apiKey;
+    if (!apiKey) {
+      setStatus('API key not configured. Please set it in extension options.');
+      generateBtn.disabled = false;
+      return;
+    }
+
+    const res = await new Promise(resolve => chrome.storage.local.get(['lastExtraction'], resolve));
+    const codes = res.lastExtraction?.codes || {};
+
+    // Prepare codes info
+    let codesInfo = '';
+    if (Object.keys(codes).length > 0) {
+      codesInfo = 'Extracted codes:\n';
+      Object.entries(codes).forEach(([type, list]) => {
+        if (list.length > 0) codesInfo += `${type}: ${list.join(', ')}\n`;
+      });
+    }
+
+    const prompt = `You are a clinical scribe. Produce a concise SOAP note (Subjective, Objective, Assessment, Plan) from the clinical content below. Include relevant extracted codes when appropriate. Return plain text with clear S:, O:, A:, P: sections.\n\nClinical content:\n${content}\n\n${codesInfo}`;
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-3-haiku-20240307',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 800
+      })
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      setStatus('API error: ' + resp.status + ' ' + errText);
+      generateBtn.disabled = false;
+      return;
+    }
+
+    const data = await resp.json();
+    const answer = data.content?.[0]?.text || '';
+
+    // Show generated SOAP below the button
+    soapText.textContent = answer.trim();
+    soapOutput.style.display = 'block';
+    setStatus('SOAP generated');
+  } catch (e) {
+    setStatus('Generation failed: ' + (e.message || e));
+  } finally {
+    generateBtn.disabled = false;
+  }
 });

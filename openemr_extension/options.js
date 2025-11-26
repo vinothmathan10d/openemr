@@ -6,6 +6,7 @@ document.getElementById('saveOptions').addEventListener('click', saveOptions);
 
 function loadOptions() {
   chrome.storage.sync.get({
+    apiKey: '',
     enableValidation: true,
     autoLink: true,
     icd10: true,
@@ -13,6 +14,7 @@ function loadOptions() {
     snomed: true,
     maxTextLength: 50000
   }, function(items) {
+    document.getElementById('apiKey').value = items.apiKey;
     document.getElementById('enableValidation').checked = items.enableValidation;
     document.getElementById('autoLink').checked = items.autoLink;
     document.getElementById('icd10').checked = items.icd10;
@@ -24,6 +26,7 @@ function loadOptions() {
 
 function saveOptions() {
   const options = {
+    apiKey: document.getElementById('apiKey').value,
     enableValidation: document.getElementById('enableValidation').checked,
     autoLink: document.getElementById('autoLink').checked,
     icd10: document.getElementById('icd10').checked,

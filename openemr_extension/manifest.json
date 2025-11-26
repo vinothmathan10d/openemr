@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "OpenEMR Medical Code Extractor",
+  "name": "SOAP Assistant",
   "version": "2.0",
-  "description": "Enhanced extraction and validation of medical codes from OpenEMR doctor notes with export features",
+  "description": "AI-powered SOAP note generation from medical content with code extraction",
   "permissions": [
     "activeTab",
     "scripting",
@@ -14,7 +14,8 @@
   ],
   "host_permissions": [
     "*://localhost/*",
-    "*://127.0.0.1/*"
+    "*://127.0.0.1/*",
+    "https://api.anthropic.com/*"
   ],
   "action": {
     "default_popup": "popup.html"
