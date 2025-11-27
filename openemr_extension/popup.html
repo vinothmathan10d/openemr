@@ -5,8 +5,8 @@
   <title>SOAP Assistant</title>
   <style>
     body {
-      width: 420px;
-      min-height: 560px;
+      width: 550px;
+      min-height: 700px;
       margin: 0;
       padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -50,41 +50,9 @@
       transform: none;
       box-shadow: none;
     }
-    .tabs {
-      margin: 20px 0 15px 0;
-    }
-    .tab-buttons {
-      display: flex;
-      border-radius: 8px;
-      overflow: hidden;
-      background: #f5f5f5;
-      padding: 2px;
-      margin-bottom: 15px;
-    }
-    .tab-btn {
-      flex: 1;
-      padding: 10px;
-      background: transparent;
-      border: none;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      transition: background 0.2s ease;
-    }
-    .tab-btn.active {
-      background: white;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      border-radius: 6px;
-    }
-    .tab-content {
-      display: none;
-    }
-    .tab-content.active {
-      display: block;
-    }
     #extractedText {
       width: 100%;
-      height: 400px;
+      height: 550px;
       border: 1px solid #e6e6e6;
       border-radius: 8px;
       padding: 12px;
@@ -98,41 +66,6 @@
       outline: none;
       border-color: #8250df;
       box-shadow: 0 0 0 3px rgba(130, 80, 223, 0.1);
-    }
-    #codesContainer {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 15px;
-    }
-    .code-column {
-      flex: 1;
-      min-width: 120px;
-      background: #f8f9fa;
-      border-radius: 8px;
-      padding: 12px;
-      border: 1px solid #e6e6e6;
-    }
-    .code-column h4 {
-      margin: 0 0 10px 0;
-      font-size: 16px;
-      color: #333;
-      font-weight: 600;
-    }
-    .chip {
-      display: inline-block;
-      background: white;
-      padding: 8px 10px;
-      border-radius: 6px;
-      margin: 4px 4px 0 0;
-      border: 1px solid #dee2e6;
-      font-family: 'SF Mono', Monaco, Consolas, monospace;
-      font-size: 13px;
-      cursor: pointer;
-      transition: background 0.2s ease, border-color 0.2s ease;
-    }
-    .chip:hover {
-      background: #f0f8ff;
-      border-color: #8250df;
     }
     .generate {
       width: 100%;
@@ -180,6 +113,128 @@
       color: #555;
       margin: 0;
     }
+    .result-tabs {
+      margin: 20px 0 15px 0;
+    }
+    .result-tab-buttons {
+      display: flex;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #f5f5f5;
+      padding: 2px;
+      margin-bottom: 15px;
+    }
+    .result-tab-btn {
+      flex: 1;
+      padding: 10px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      transition: background 0.2s ease;
+    }
+    .result-tab-btn.active {
+      background: white;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      border-radius: 6px;
+      font-weight: bold;
+    }
+    .result-tab-btn:not(.active) {
+      color: #666;
+    }
+    .result-tab-content {
+      display: none;
+      background: #f8fafc;
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+    .result-tab-content.active {
+      display: block;
+    }
+    .result-tab-content {
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .soap-card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    .soap-heading {
+      margin: 0 0 10px 0;
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .soap-section {
+      margin-bottom: 15px;
+    }
+    .soap-divider {
+      border: none;
+      height: 1px;
+      background: #e1e5e9;
+      margin: 15px 0;
+    }
+    .soap-section p {
+      margin: 0;
+      line-height: 1.6;
+      color: #555;
+    }
+    .codes-card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    .code-heading {
+      margin: 0 0 15px 0;
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+    .code-section {
+      margin-bottom: 20px;
+    }
+    .code-section:last-child {
+      margin-bottom: 0;
+    }
+    .codes-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 8px;
+    }
+    .code-pill {
+      background: white;
+      border: 1px solid #e1e4e8;
+      border-radius: 20px;
+      padding: 8px 12px;
+      text-align: center;
+      font-family: 'SF Mono', Monaco, Consolas, monospace;
+      font-size: 13px;
+      color: #24292e;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      transition: transform 0.1s ease;
+    }
+    .code-pill:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+    }
+    .code-pill .code-text {
+      display: block;
+      font-weight: bold;
+    }
+    .code-pill .code-desc {
+      display: block;
+      font-size: 11px;
+      margin-top: 2px;
+      color: #666;
+      font-family: inherit;
+    }
     #status {
       font-size: 12px;
       color: #666;
@@ -202,47 +257,68 @@
 </head>
 <body>
   <div class="panel">
-    <h1>SOAP Assistant</h1>
+    <div style="position: relative;">
+      <h1>SOAP Assistant</h1>
+      <button id="clearAll" style="position: absolute; top: 0; right: 0; background: none; border: none; font-size: 20px; cursor: pointer; color: #666; padding: 5px;">&times;</button>
+    </div>
 
-    <div style="display: flex; gap: 10px;">
-      <button id="getContent" class="primary" style="flex: 1;">Get Content</button>
-      <button id="clearBtn" class="primary" style="flex: 1; background: linear-gradient(135deg, #6c757d, #495057);">Clear</button>
+    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+      <button id="getContent" class="generate" style="flex: 1;">Get Content</button>
+      <button id="generateSoapTop" class="generate" style="flex: 1;" disabled>Generate SOAP</button>
     </div>
 
     <div id="contentArea" style="display: none;">
-      <div class="tabs">
-        <div class="tab-buttons">
-          <button id="tabExtracted" class="tab-btn active">Extracted Content</button>
-          <button id="tabCodes" class="tab-btn">Codes</button>
-        </div>
+      <textarea id="extractedText" placeholder="Press 'Get Content' to extract visit notes and details..."></textarea>
 
-        <div id="extractedContent" class="tab-content active">
-          <textarea id="extractedText" placeholder="Press 'Get Content' to extract visit notes and details..."></textarea>
+      <div id="resultSection" style="display: none;">
+        <div style="position: relative;">
+          <button id="closeResults" style="position: absolute; top: -10px; right: -10px; background: none; border: none; font-size: 24px; cursor: pointer; color: #666; padding: 0;">&times;</button>
         </div>
+        <div class="result-tabs">
+          <div class="result-tab-buttons">
+            <button id="tabSoap" class="result-tab-btn active">SOAP Content</button>
+            <button id="tabCodesResult" class="result-tab-btn">Codes</button>
+          </div>
 
-        <div id="codesContent" class="tab-content">
-          <div id="codesContainer">
-            <div class="code-column">
-              <h4>ICD-10</h4>
-              <div id="icdList"></div>
+          <div id="soapContent" class="result-tab-content active">
+            <div class="soap-card">
+              <div class="soap-section">
+                <h4 class="soap-heading">Subjective</h4>
+                <p id="soapSubjective"></p>
+              </div>
+              <hr class="soap-divider">
+              <div class="soap-section">
+                <h4 class="soap-heading">Objective</h4>
+                <p id="soapObjective"></p>
+              </div>
+              <hr class="soap-divider">
+              <div class="soap-section">
+                <h4 class="soap-heading">Assessment</h4>
+                <p id="soapAssessment"></p>
+              </div>
+              <hr class="soap-divider">
+              <div class="soap-section">
+                <h4 class="soap-heading">Plan</h4>
+                <p id="soapPlan"></p>
+              </div>
             </div>
-            <div class="code-column">
-              <h4>CPT</h4>
-              <div id="cptList"></div>
-            </div>
-            <div class="code-column">
-              <h4>SNOMED</h4>
-              <div id="snomedList"></div>
+          </div>
+
+          <div id="codesResultContent" class="result-tab-content">
+            <div class="codes-card">
+              <div class="code-section">
+                <h4 class="code-heading">ICD-10</h4>
+                <div id="icdCodesGrid" class="codes-grid"></div>
+              </div>
+              <div class="code-section">
+                <h4 class="code-heading">CPT</h4>
+                <div id="cptCodesGrid" class="codes-grid"></div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <button id="generateSoap" class="generate" disabled>Generate SOAP</button>
-
-      <div id="soapOutput" style="display: none;">
-        <h3>Generated SOAP Note</h3>
-        <pre id="soapText"></pre>
+        <button id="regenerateSoap" class="generate" style="display: none;">Regenerate SOAP</button>
       </div>
     </div>
 
