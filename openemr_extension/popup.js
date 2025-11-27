@@ -204,6 +204,8 @@ async function generateSoap() {
     const options = await new Promise(resolve => chrome.storage.sync.get({ apiKey: '' }, resolve));
     const apiKey = options.apiKey || '';
 
+    console.log('Retrieved API key:', apiKey ? '[SET]' : '[NOT SET]');
+
     if (!apiKey) {
       setStatus('Please set your Anthropic API key in the extension options.');
       generateSoapTop.disabled = false;
