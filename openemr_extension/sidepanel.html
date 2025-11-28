@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>SOAP Assistant</title>
+    <link rel="stylesheet" href="sidepanel.css">
+</head>
+
+<body>
+    <div class="assistant-container">
+        <!-- Header -->
+        <div class="assistant-header">
+            <div class="header-content">
+                <div class="assistant-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                        <path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                    </svg>
+                    <span>Assistant</span>
+                </div>
+                <button id="closePanel" class="close-btn" title="Close">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div class="assistant-content">
+            <!-- Initial State -->
+            <div id="initialState" class="initial-state">
+                <div class="welcome-section">
+                    <div class="welcome-icon">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                            <path d="M2 17l10 5 10-5M2 12l10 5 10-5"></path>
+                        </svg>
+                    </div>
+                    <h2>SOAP Assistant</h2>
+                    <p>Extract clinical content and generate SOAP notes with AI</p>
+                    <button id="getContentBtn" class="primary-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Get Content from Page
+                    </button>
+                </div>
+            </div>
+
+            <!-- Content Extracted State -->
+            <div id="contentState" class="content-state" style="display: none;">
+                <div class="content-header">
+                    <h3>Extracted Content</h3>
+                    <button id="clearContent" class="icon-btn" title="Clear">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <polyline points="3 6 5 6 21 6"></polyline>
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                            </path>
+                        </svg>
+                    </button>
+                </div>
+                <textarea id="extractedText" placeholder="Extracted content will appear here..."></textarea>
+                <button id="generateSoapBtn" class="primary-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                    </svg>
+                    Generate SOAP Note
+                </button>
+            </div>
+
+            <!-- Results State -->
+            <div id="resultsState" class="results-state" style="display: none;">
+                <div class="results-header">
+                    <h3>SOAP Note</h3>
+                    <div class="results-actions">
+                        <button id="regenerateBtn" class="icon-btn" title="Regenerate">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <polyline points="23 4 23 10 17 10"></polyline>
+                                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+                            </svg>
+                        </button>
+                        <button id="backToContent" class="icon-btn" title="Back">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <line x1="19" y1="12" x2="5" y2="12"></line>
+                                <polyline points="12 19 5 12 12 5"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="tabs">
+                    <button id="tabSoap" class="tab-btn active">SOAP</button>
+                    <button id="tabCodes" class="tab-btn">Codes</button>
+                </div>
+
+                <!-- SOAP Content Tab -->
+                <div id="soapTab" class="tab-content active">
+                    <div class="soap-section">
+                        <div class="soap-label">Subjective</div>
+                        <div id="soapSubjective" class="soap-text"></div>
+                    </div>
+                    <div class="soap-section">
+                        <div class="soap-label">Objective</div>
+                        <div id="soapObjective" class="soap-text"></div>
+                    </div>
+                    <div class="soap-section">
+                        <div class="soap-label">Assessment</div>
+                        <div id="soapAssessment" class="soap-text"></div>
+                    </div>
+                    <div class="soap-section">
+                        <div class="soap-label">Plan</div>
+                        <div id="soapPlan" class="soap-text"></div>
+                    </div>
+                </div>
+
+                <!-- Codes Tab -->
+                <div id="codesTab" class="tab-content">
+                    <div class="codes-section">
+                        <h4>ICD-10 Codes</h4>
+                        <div id="icdCodesGrid" class="codes-grid"></div>
+                    </div>
+                    <div class="codes-section">
+                        <h4>CPT Codes</h4>
+                        <div id="cptCodesGrid" class="codes-grid"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="assistant-footer">
+            <div id="status" class="status-text">Ready</div>
+        </div>
+    </div>
+
+    <script src="assistant.js"></script>
+</body>
+
+</html>

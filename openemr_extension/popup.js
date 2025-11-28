@@ -3,6 +3,7 @@ const getContentBtn = document.getElementById('getContent');
 const generateSoapTop = document.getElementById('generateSoapTop');
 const regenerateBtn = document.getElementById('regenerateSoap');
 const clearAllBtn = document.getElementById('clearAll');
+const saveBtn = document.getElementById('saveBtn');
 const extractedTextEl = document.getElementById('extractedText');
 const statusEl = document.getElementById('status');
 const contentArea = document.getElementById('contentArea');
@@ -127,19 +128,19 @@ function aggregateResults(results) {
 // The function that will run in the page context to extract text and codes
 function pageExtractor() {
   try {
-    const ignoredTags = new Set(['SCRIPT','STYLE','NOSCRIPT','IFRAME','IMG','SVG','CANVAS','INPUT','BUTTON','SELECT','OPTION']);
+    const ignoredTags = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'IMG', 'SVG', 'CANVAS', 'INPUT', 'BUTTON', 'SELECT', 'OPTION']);
     let text = (document.body && document.body.innerText) ? document.body.innerText : '';
 
     const hintSelectors = '[class*=note],[class*=notes],[class*=clinical],[class*=narrative],[id*=note],[id*=notes],[id*=clinical],[id*=narrative],[class*=visit],[id*=visit],[class*=encounter],[id*=encounter]';
     try {
       const hints = document.querySelectorAll(hintSelectors);
       hints.forEach(el => { if (el && el.innerText) text += '\n' + el.innerText; });
-    } catch(e) {}
+    } catch (e) { }
 
     const inputs = document.querySelectorAll('textarea, input[type=text], [contenteditable="true"]');
-    inputs.forEach(i => { try { text += '\n' + (i.value || i.innerText || i.textContent || ''); } catch(e) {} });
+    inputs.forEach(i => { try { text += '\n' + (i.value || i.innerText || i.textContent || ''); } catch (e) { } });
 
-    text = text.replace(/\u00A0/g,' ').replace(/\s+/, ' ').trim();
+    text = text.replace(/\u00A0/g, ' ').replace(/\s+/, ' ').trim();
 
     const codes = {};
     const icdRegex = /\b[A-TV-Z]\d{2}(?:\.\d{1,4})?\b/g;
@@ -188,7 +189,9 @@ function populateResults(soapContent, codes) {
   });
 
   generateSoapTop.textContent = 'Regenerate SOAP';
-  saveBtn.style.display = 'block';
+  if (saveBtn) {
+    saveBtn.style.display = 'block';
+  }
   setStatus('SOAP generated');
 }
 
@@ -312,7 +315,9 @@ Output only the JSON, start with { and end with }:`;
 generateSoapTop.addEventListener('click', generateSoap);
 regenerateBtn.addEventListener('click', generateSoap);
 
-saveBtn.addEventListener('click', saveToOpenEMR);
+if (saveBtn) {
+  saveBtn.addEventListener('click', saveToOpenEMR);
+}
 
 async function saveToOpenEMR() {
   setStatus('Saving to OpenEMR...', true);

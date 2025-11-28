@@ -18,8 +18,23 @@
     "https://api.anthropic.com/*"
   ],
   "action": {
-    "default_popup": "popup.html"
+    "default_icon": "icon.png"
   },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "sidepanel.html",
+        "sidepanel.css",
+        "assistant.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true
