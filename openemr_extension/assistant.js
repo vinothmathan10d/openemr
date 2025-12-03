@@ -105,7 +105,7 @@
             });
 
             if (!results || results.length === 0) {
-                setStatus('Failed to extract content');
+                setStatus('Failed to extract content'); l
                 getContentBtn.disabled = false;
                 return;
             }
@@ -212,7 +212,7 @@
 
         try {
             const options = await chrome.storage.sync.get({ apiKey: '' });
-            const apiKey = options.apiKey;
+            const apiKey = options.apiKey ;
 
             if (!apiKey) {
                 setStatus('Please set your API key in extension options');
@@ -398,8 +398,11 @@ Output only the JSON, start with { and end with }:`;
     }
 
     // Worker function to run inside the page (in all frames)
-    function insertionWorker(data, autoSave = false) {
+    async function insertionWorker(data, autoSave = false) {
         try {
+            console.log('[Extension] insertionWorker called in frame:', window.location.href);
+            console.log('[Extension] Data received:', data);
+
             let inserted = false;
             let soapUrl = null;
             let feeSheetUrl = null;
@@ -442,6 +445,8 @@ Output only the JSON, start with { and end with }:`;
 
             // Insert SOAP data
             if (data.soap) {
+                console.log('[Extension] Attempting to insert SOAP data');
+
                 const fields = {
                     'subjective': data.soap.subjective,
                     'objective': data.soap.objective,
@@ -454,14 +459,19 @@ Output only the JSON, start with { and end with }:`;
                     if (!value) continue;
                     const el = findTextarea(key);
                     if (el) {
+                        console.log(`[Extension] Found ${key} field:`, el);
                         el.value = value;
                         el.dispatchEvent(new Event('input', { bubbles: true }));
                         el.dispatchEvent(new Event('change', { bubbles: true }));
                         el.dispatchEvent(new Event('blur', { bubbles: true }));
                         inserted = true;
                         soapFieldsFound++;
+                    } else {
+                        console.log(`[Extension] Could not find ${key} field`);
                     }
                 }
+
+                console.log(`[Extension] SOAP fields found: ${soapFieldsFound} / 4`);
 
                 if (soapFieldsFound > 0 && autoSave) {
                     setTimeout(clickSave, 500);
@@ -470,27 +480,58 @@ Output only the JSON, start with { and end with }:`;
 
             // Insert Codes - Direct table insertion
             if (data.icdCodes && data.icdCodes.length > 0 || data.cptCodes && data.cptCodes.length > 0) {
+                console.log('[Extension] Attempting to insert codes');
+                console.log('[Extension] ICD Codes:', data.icdCodes);
+                console.log('[Extension] CPT Codes:', data.cptCodes);
+
+                // Check if we're on the right page based on URL
+                const currentUrl = window.location.href.toLowerCase();
+                const isFeeSheetPage = currentUrl.includes('fee_sheet') ||
+                    currentUrl.includes('billing') ||
+                    currentUrl.includes('superbill');
+
+                console.log('[Extension] URL check - Is Fee Sheet page?', isFeeSheetPage);
+                console.log('[Extension] Current URL:', window.location.href);
+
+                if (!isFeeSheetPage) {
+                    console.warn('[Extension] ⚠️ WARNING: You may not be on the Fee Sheet page!');
+                    console.warn('[Extension] Expected URL to contain: "fee_sheet", "billing", or "superbill"');
+                    console.warn('[Extension] Current URL:', window.location.href);
+                    console.warn('[Extension] Please navigate to the Fee Sheet tab before clicking Insert');
+                }
+
                 // Helper to find the "Selected Fee Sheet Codes and Charges for Current Encounter" table
                 const findFeeSheetTable = () => {
-                    // First, look for the specific heading "Selected Fee Sheet Codes and Charges for Current Encounter"
+                    console.log('[Extension] Searching for Fee Sheet table...');
+                    console.log('[Extension] Current URL:', window.location.href);
+                    console.log('[Extension] Page title:', document.title);
+
+                    // Strategy 1: Look for the specific heading "Selected Fee Sheet Codes"
                     const allElements = Array.from(document.querySelectorAll('*'));
+                    console.log(`[Extension] Checking ${allElements.length} elements for heading`);
 
                     for (const element of allElements) {
                         const text = element.innerText || element.textContent || '';
 
-                        // Look for the exact section heading (not "Select Code")
-                        if (text.includes('Selected Fee Sheet Codes and Charges for Current Encounter')) {
+                        // Look for the section heading (more flexible matching)
+                        if (text.includes('Selected Fee Sheet Codes') ||
+                            text.includes('Fee Sheet Codes and Charges')) {
+                            console.log('[Extension] Found Fee Sheet heading:', element);
+                            console.log('[Extension] Heading text:', text.substring(0, 100));
+
                             // Found the heading, now find the table after it
                             let nextElement = element.nextElementSibling;
 
                             // Search through next siblings for a table
                             while (nextElement) {
                                 if (nextElement.tagName === 'TABLE') {
+                                    console.log('[Extension] Found table after heading:', nextElement);
                                     return nextElement;
                                 }
                                 // Also check if table is nested inside the next element
                                 const nestedTable = nextElement.querySelector('table');
                                 if (nestedTable) {
+                                    console.log('[Extension] Found nested table:', nestedTable);
                                     return nestedTable;
                                 }
                                 nextElement = nextElement.nextElementSibling;
@@ -500,10 +541,12 @@ Output only the JSON, start with { and end with }:`;
                             let parentNext = element.parentElement?.nextElementSibling;
                             while (parentNext) {
                                 if (parentNext.tagName === 'TABLE') {
+                                    console.log('[Extension] Found table in parent siblings:', parentNext);
                                     return parentNext;
                                 }
                                 const nestedTable = parentNext.querySelector('table');
                                 if (nestedTable) {
+                                    console.log('[Extension] Found nested table in parent siblings:', nestedTable);
                                     return nestedTable;
                                 }
                                 parentNext = parentNext.nextElementSibling;
@@ -511,29 +554,67 @@ Output only the JSON, start with { and end with }:`;
                         }
                     }
 
-                    // Fallback: Look for table with specific column headers (Type, Code, Description, Modifiers, Price, Qty, Justify)
+                    // Strategy 2: Look for table with specific column headers
+                    console.log('[Extension] Strategy 1 failed, trying header-based detection...');
                     const tables = Array.from(document.querySelectorAll('table'));
-                    for (const table of tables) {
+                    console.log(`[Extension] Found ${tables.length} tables on page`);
+
+                    for (let i = 0; i < tables.length; i++) {
+                        const table = tables[i];
                         const headerRow = table.querySelector('thead tr, tr:first-child');
                         if (headerRow) {
                             const headerText = headerRow.innerText.toLowerCase();
-                            // Make sure it has the right columns and is NOT the "Select Code" table
-                            if (headerText.includes('type') &&
-                                headerText.includes('code') &&
-                                headerText.includes('description') &&
-                                headerText.includes('modifiers') &&
-                                !headerText.includes('new patient') &&
-                                !headerText.includes('established patient')) {
+                            console.log(`[Extension] Table ${i + 1} headers:`, headerText);
+
+                            // Check for Fee Sheet table headers (more flexible)
+                            const hasType = headerText.includes('type');
+                            const hasCode = headerText.includes('code');
+                            const hasDescription = headerText.includes('description');
+                            const hasPrice = headerText.includes('price');
+                            const hasQty = headerText.includes('qty');
+
+                            // Exclude "Select Code" tables
+                            const isSelectCodeTable = headerText.includes('new patient') ||
+                                headerText.includes('established patient');
+
+                            console.log(`[Extension] Table ${i + 1} analysis:`, {
+                                hasType, hasCode, hasDescription, hasPrice, hasQty, isSelectCodeTable
+                            });
+
+                            if (hasType && hasCode && hasDescription && !isSelectCodeTable) {
+                                console.log('[Extension] Found matching Fee Sheet table!', table);
                                 return table;
                             }
                         }
                     }
 
+                    // Strategy 3: Look for any table with "Type" and "Code" columns (very permissive)
+                    console.log('[Extension] Strategy 2 failed, trying permissive detection...');
+                    for (let i = 0; i < tables.length; i++) {
+                        const table = tables[i];
+                        const headerRow = table.querySelector('tr');
+                        if (headerRow) {
+                            const cells = Array.from(headerRow.querySelectorAll('th, td'));
+                            const cellTexts = cells.map(c => c.innerText.toLowerCase().trim());
+                            console.log(`[Extension] Table ${i + 1} cell texts:`, cellTexts);
+
+                            if (cellTexts.includes('type') && cellTexts.includes('code')) {
+                                console.log('[Extension] Found table with Type and Code columns:', table);
+                                return table;
+                            }
+                        }
+                    }
+
+                    console.log('[Extension] No Fee Sheet table found after all strategies');
                     return null;
                 };
 
+
+
                 // Helper to create a table row for a code
                 const createCodeRow = (codeData, codeType) => {
+                    console.log(`[Extension] Creating row for ${codeType}:`, codeData);
+
                     const row = document.createElement('tr');
 
                     // Mark this row as inserted by the extension so we can remove it later
@@ -546,6 +627,9 @@ Output only the JSON, start with { and end with }:`;
                     const code = codeData.code || codeData;
                     const description = codeData.fullDescription || codeData.shortDescription || codeData.description || code;
                     const price = codeData.price || (isICD ? '' : '0.00');
+
+                    console.log(`[Extension] Row data - Code: ${code}, Desc: ${description}, Price: ${price}`);
+
 
                     // Match the exact OpenEMR table structure from the screenshot
                     // Columns: Type | Code | Description | Modifiers | Price | Qty | Justify | Note Codes | Auth | Delete
@@ -560,9 +644,38 @@ Output only the JSON, start with { and end with }:`;
                     codeCell.textContent = code;
                     row.appendChild(codeCell);
 
-                    // Description cell (plain text, no input)
+                    // Description cell (Truncated with click to expand)
                     const descCell = document.createElement('td');
-                    descCell.textContent = description;
+                    descCell.title = "Click to view full description";
+                    descCell.style.cursor = "pointer";
+                    descCell.style.whiteSpace = "nowrap";
+                    descCell.style.overflow = "hidden";
+                    descCell.style.textOverflow = "ellipsis";
+                    descCell.style.maxWidth = "300px"; // Limit width
+                    descCell.style.display = "block"; // Needed for max-width to work in td sometimes, or use div inside
+
+                    // Better approach: Put text in a div inside td
+                    descCell.innerHTML = '';
+                    const descDiv = document.createElement('div');
+                    descDiv.textContent = description;
+                    descDiv.style.whiteSpace = "nowrap";
+                    descDiv.style.overflow = "hidden";
+                    descDiv.style.textOverflow = "ellipsis";
+                    descDiv.style.maxWidth = "350px";
+                    descCell.appendChild(descDiv);
+
+                    // Click handler to toggle expansion
+                    descCell.onclick = function () {
+                        if (descDiv.style.whiteSpace === "nowrap") {
+                            descDiv.style.whiteSpace = "normal";
+                            descDiv.style.overflow = "visible";
+                            descDiv.style.textOverflow = "clip";
+                        } else {
+                            descDiv.style.whiteSpace = "nowrap";
+                            descDiv.style.overflow = "hidden";
+                            descDiv.style.textOverflow = "ellipsis";
+                        }
+                    };
                     row.appendChild(descCell);
 
                     // Modifiers cell (empty input)
@@ -620,59 +733,148 @@ Output only the JSON, start with { and end with }:`;
 
                 // Main insertion logic
                 try {
-                    const table = findFeeSheetTable();
+                    let table = findFeeSheetTable();
+
+                    // SMART FIX: If table not found, try to find and click the "Fee Sheet" tab
                     if (!table) {
-                        console.error('Could not find Fee Sheet table');
-                        return { success: false, error: 'Fee Sheet table not found' };
+                        console.log('[Extension] Table not found. Looking for "Fee Sheet" tab to auto-navigate...');
+
+                        // Look for the Fee Sheet tab/link
+                        const allLinks = Array.from(document.querySelectorAll('a, li, span, div'));
+                        const feeSheetTab = allLinks.find(el => {
+                            const text = (el.innerText || '').toLowerCase().trim();
+                            return text === 'fee sheet' && el.offsetParent !== null; // Must be visible
+                        });
+
+                        if (feeSheetTab) {
+                            console.log('[Extension] Found Fee Sheet tab! Attempting to click...', feeSheetTab);
+                            feeSheetTab.click();
+
+                            // Wait for potential iframe load or AJAX update
+                            console.log('[Extension] Waiting for Fee Sheet to load...');
+                            await new Promise(resolve => setTimeout(resolve, 1500));
+
+                            // Try finding table again
+                            table = findFeeSheetTable();
+                            if (table) {
+                                console.log('[Extension] Success! Found table after navigation.');
+                            } else {
+                                console.log('[Extension] Still could not find table after navigation.');
+
+                                // Try looking in new frames?
+                                // We can't easily jump frames here, but often the tab loads in the SAME frame or a child
+                                // If it's a child frame, we might need to rely on the user clicking Insert again
+                                // But let's try one more fallback - check if a new iframe appeared
+                                const iframes = document.querySelectorAll('iframe');
+                                if (iframes.length > 0) {
+                                    console.log(`[Extension] Found ${iframes.length} iframes. The table might be inside one of them.`);
+                                    // Removed the return statement here to allow the process to continue
+                                    // and potentially find the table in the newly loaded content.
+                                }
+                            }
+                        } else {
+                            console.log('[Extension] Could not find "Fee Sheet" tab to click.');
+                        }
                     }
 
+                    if (!table) {
+                        console.error('[Extension] Could not find Fee Sheet table');
+                        return { success: false, error: 'Fee Sheet table not found. Please make sure you are on the Fee Sheet tab.' };
+                    }
+
+                    console.log('[Extension] Found Fee Sheet table, proceeding with insertion');
                     const tbody = table.querySelector('tbody') || table;
 
                     // IMPORTANT: Remove all previously inserted rows by the extension
                     // This prevents duplicates when clicking "Insert" multiple times
                     const previouslyInserted = tbody.querySelectorAll('tr[data-extension-inserted="true"]');
+                    console.log(`[Extension] Removing ${previouslyInserted.length} previously inserted rows`);
                     previouslyInserted.forEach(row => row.remove());
 
-                    // Find the header row (it contains "Type", "Code", "Description", etc.)
+                    // 1. Find the Header Row
                     let headerRow = null;
-                    const rows = tbody.querySelectorAll('tr');
-                    for (const row of rows) {
-                        const cellText = row.innerText.toLowerCase();
-                        if (cellText.includes('type') && cellText.includes('code') && cellText.includes('description')) {
+                    const allRows = Array.from(tbody.querySelectorAll('tr'));
+
+                    // Log all rows to debug structure
+                    console.log(`[Extension] Scanning ${allRows.length} rows for header...`);
+
+                    for (const row of allRows) {
+                        const text = row.innerText.toLowerCase();
+                        // Relaxed check: just Type, Code, Description
+                        if (text.includes('type') && text.includes('code') && text.includes('description')) {
                             headerRow = row;
+                            console.log('[Extension] FOUND HEADER ROW:', row);
                             break;
                         }
                     }
 
-                    if (!headerRow) {
-                        console.error('Could not find header row in Fee Sheet table');
-                        return { success: false, error: 'Header row not found' };
+                    // 2. Force Header to Top
+                    if (headerRow) {
+                        // Check if it's already at the top
+                        if (tbody.firstElementChild !== headerRow) {
+                            console.log('[Extension] Moving header row to the very top of tbody');
+                            tbody.prepend(headerRow);
+                        }
+                    } else {
+                        // Fallback: Check THEAD
+                        const thead = table.querySelector('thead');
+                        if (thead) {
+                            const theadRow = thead.querySelector('tr');
+                            if (theadRow && theadRow.innerText.toLowerCase().includes('type')) {
+                                console.log('[Extension] Found header in THEAD');
+                                headerRow = theadRow;
+                            }
+                        }
+
+                        if (!headerRow) {
+                            console.error('[Extension] CRITICAL: Could not find header row. Table structure is unexpected.');
+                            // We will continue, but layout might be wrong.
+                            // Try to use the first row as anchor if it looks like a header?
+                            if (allRows.length > 0) {
+                                console.warn('[Extension] Using first row as fallback anchor');
+                                headerRow = allRows[0];
+                            }
+                        }
                     }
 
+                    // 3. Prepare New Rows
+                    const fragment = document.createDocumentFragment();
                     let insertedCount = 0;
-                    let lastInsertedRow = headerRow; // Track the last inserted position
 
-                    // Insert ICD codes (after header row)
+                    // Helper to add to fragment
+                    const addToFragment = (codeData, type) => {
+                        const row = createCodeRow(codeData, type);
+                        fragment.appendChild(row);
+                        insertedCount++;
+                    };
+
+                    // Add ICD codes
                     if (data.icdCodes && data.icdCodes.length > 0) {
-                        for (const code of data.icdCodes) {
-                            const row = createCodeRow(code, 'ICD10');
-                            // Insert after the last inserted row
-                            lastInsertedRow.parentNode.insertBefore(row, lastInsertedRow.nextSibling);
-                            lastInsertedRow = row; // Update last inserted row
-                            insertedCount++;
+                        console.log(`[Extension] Adding ${data.icdCodes.length} ICD codes to fragment`);
+                        data.icdCodes.forEach(code => addToFragment(code, 'ICD10'));
+                    }
+
+                    // Add CPT codes
+                    if (data.cptCodes && data.cptCodes.length > 0) {
+                        console.log(`[Extension] Adding ${data.cptCodes.length} CPT codes to fragment`);
+                        data.cptCodes.forEach(code => addToFragment(code, 'CPT4'));
+                    }
+
+                    // 4. Insert Fragment
+                    if (insertedCount > 0) {
+                        if (headerRow) {
+                            console.log('[Extension] Inserting new rows AFTER header row');
+                            headerRow.after(fragment);
+                        } else {
+                            console.log('[Extension] No header row anchor. Appending new rows to tbody.');
+                            tbody.appendChild(fragment);
                         }
                     }
 
-                    // Insert CPT codes (after ICD codes)
-                    if (data.cptCodes && data.cptCodes.length > 0) {
-                        for (const code of data.cptCodes) {
-                            const row = createCodeRow(code, 'CPT4');
-                            // Insert after the last inserted row
-                            lastInsertedRow.parentNode.insertBefore(row, lastInsertedRow.nextSibling);
-                            lastInsertedRow = row; // Update last inserted row
-                            insertedCount++;
-                        }
-                    }
+
+
+
+                    console.log(`[Extension] Successfully inserted ${insertedCount} code rows`);
 
                     // Trigger any recalculation functions
                     if (insertedCount > 0) {
@@ -686,13 +888,16 @@ Output only the JSON, start with { and end with }:`;
 
                     inserted = insertedCount > 0;
                 } catch (e) {
-                    console.error('Error inserting codes directly:', e);
+                    console.error('[Extension] Error inserting codes directly:', e);
+                    return { success: false, error: e.message };
                 }
             }
 
             // If nothing was inserted, look for links to the correct pages
             if (!inserted) {
+                console.log('[Extension] No fields found, searching for navigation links...');
                 const links = Array.from(document.querySelectorAll('a'));
+                console.log(`[Extension] Found ${links.length} links on page`);
 
                 // Find SOAP link
                 const soapLink = links.find(a => a.innerText && (
@@ -700,7 +905,12 @@ Output only the JSON, start with { and end with }:`;
                     a.innerText.toLowerCase().includes('soap note') ||
                     a.innerText.toLowerCase().includes('clinical')
                 ));
-                if (soapLink) soapUrl = soapLink.href;
+                if (soapLink) {
+                    soapUrl = soapLink.href;
+                    console.log('[Extension] Found SOAP link:', soapUrl);
+                } else {
+                    console.log('[Extension] No SOAP link found');
+                }
 
                 // Find Fee Sheet link
                 const feeLink = links.find(a => a.innerText && (
@@ -709,10 +919,17 @@ Output only the JSON, start with { and end with }:`;
                     a.innerText.toLowerCase().includes('billing') ||
                     a.innerText.toLowerCase().includes('coding')
                 ));
-                if (feeLink) feeSheetUrl = feeLink.href;
+                if (feeLink) {
+                    feeSheetUrl = feeLink.href;
+                    console.log('[Extension] Found Fee Sheet link:', feeSheetUrl);
+                } else {
+                    console.log('[Extension] No Fee Sheet link found');
+                }
             }
 
-            return { success: inserted, soapUrl, feeSheetUrl };
+            const result = { success: inserted, soapUrl, feeSheetUrl };
+            console.log('[Extension] Returning result:', result);
+            return result;
         } catch (e) {
             return { success: false, error: e.message };
         }
@@ -740,19 +957,50 @@ Output only the JSON, start with { and end with }:`;
                 plan: soapPlan.textContent
             };
 
-            // Get codes from the grids
+            // Get codes from the grids - Extract full code objects
             const icdCodes = [];
             const cptCodes = [];
 
             icdCodesGrid.querySelectorAll('.code-pill').forEach(pill => {
                 const codeText = pill.querySelector('.code-text');
-                if (codeText) icdCodes.push(codeText.textContent.trim());
+                const codeType = pill.querySelector('.code-type');
+                const codeDesc = pill.querySelector('.code-desc');
+
+                if (codeText) {
+                    icdCodes.push({
+                        code: codeText.textContent.trim(),
+                        codeType: codeType ? codeType.textContent.trim() : 'ICD10',
+                        description: codeDesc ? codeDesc.textContent.trim() : '',
+                        fullDescription: codeDesc ? codeDesc.textContent.trim() : '',
+                        shortDescription: codeDesc ? codeDesc.textContent.trim().substring(0, 50) : '',
+                        price: '',
+                        active: 'Yes'
+                    });
+                }
             });
 
             cptCodesGrid.querySelectorAll('.code-pill').forEach(pill => {
                 const codeText = pill.querySelector('.code-text');
-                if (codeText) cptCodes.push(codeText.textContent.trim());
+                const codeType = pill.querySelector('.code-type');
+                const codeDesc = pill.querySelector('.code-desc');
+                const codePrice = pill.querySelector('.code-price');
+
+                if (codeText) {
+                    cptCodes.push({
+                        code: codeText.textContent.trim(),
+                        codeType: codeType ? codeType.textContent.trim() : 'CPT4',
+                        description: codeDesc ? codeDesc.textContent.trim() : '',
+                        fullDescription: codeDesc ? codeDesc.textContent.trim() : '',
+                        shortDescription: codeDesc ? codeDesc.textContent.trim().substring(0, 50) : '',
+                        price: codePrice ? codePrice.textContent.trim().replace('$', '') : '0.00',
+                        active: 'Yes'
+                    });
+                }
             });
+
+            console.log('[Extension] Extracted ICD codes:', icdCodes);
+            console.log('[Extension] Extracted CPT codes:', cptCodes);
+
 
             // 1. Try to insert in the current page (all frames)
             const results = await chrome.scripting.executeScript({
